@@ -69,6 +69,24 @@ uint16_t CRC16(uint16_t polynomial, uint16_t seed, const uint8_t *input,
     return crc;
 }
 
+
+// CRC16-CCITT (0x1021) 计算函数
+uint16_t crc16_ccitt(const uint8_t* data, size_t length) {
+    uint16_t crc = 0;
+    for (size_t i = 0; i < length; i++) {
+        crc ^= data[i] << 8;
+        for (int j = 0; j < 8; j++) {
+            if (crc & 0x8000) {
+                crc = (crc << 1) ^ 0x1021;
+            } else {
+                crc = crc << 1;
+            }
+        }
+        crc &= 0xFFFF;
+    }
+    return crc;
+}
+
 #include "linux_uart.h"
 
 struct _ts_
@@ -85,7 +103,7 @@ struct _ts_
     {
         uint32_t pos;
         uint32_t len;
-        uint8_t buf[100*1024];
+        uint8_t buf[1024*1024];
     } jpg_data;
 } ts, *self=&ts;
 
@@ -199,19 +217,37 @@ int loop()
                 if (self->jpg_data.pos == self->jpg_data.len)
                 {
                     // crc16
-                    tmpbuff = CRC16(0x1021, tmpbuff, comtmp, 200);
+                    // tmpbuff = CRC16(0x1021, tmpbuff, comtmp, 200);
+                    uint16_t crc16 = crc16_ccitt(self->jpg_data.buf, self->jpg_data.len);
+                    // python tt.py test tmp.jpg 
+                    uint16_t result = self->pack_data.data[4] << 8 | self->pack_data.data[5];
+                    printf("crc16 %x %x\r\n", crc16, result);
+        
+                    // uint16_t crc16 = 0;
+                    // crc16 = CRC16(0x1021, 0, data->data_jpg, data->size_jpg);
+                    // uint16_t result = data->buffer[4] << 8 | data->buffer[5];
+                    // LOG_ERR("crc16 %x %x\r\n", crc16, result);
+
+                    // save jpg to tmp.jpg
+                    FILE *fp = fopen("tmp.jpg", "wb");
+                    fwrite(self->jpg_data.buf, self->jpg_data.len, 1, fp);
+                    fclose(fp);
+                    
                 }
                 
-                // uint8_t tmp[] = "\x01\xAC\x0B\x0B\x00";
-                // write(self->dev_ttyS, tmp, sizeof(tmp));
+                uint8_t tmp[] = "\x01\xAC\x0B\x0B\x00";
+                write(self->dev_ttyS, tmp, sizeof(tmp));
 
                 puts("0x0C!");
             }
             else if(self->pack_data.data[3] == 0x04)
             {
-                uint8_t tmp[] = "\x08\xAC\x3C\x04\x01\x18\x04\x02\x00\x19\x00\x00";
+                // uint8_t tmp[] = "\x08\xAC\x3C\x04\x01\x18\x04\x02\x00\x19\x00\x00";
+                // write(self->dev_ttyS, tmp, sizeof(tmp));
+                
+                uint8_t tmp[] = "\x01\xAC\x04\x04\x00";
                 write(self->dev_ttyS, tmp, sizeof(tmp));
-
+                
                 puts("0x04!");
             }
             else if(self->pack_data.data[3] == 0x0F)
@@ -220,6 +256,13 @@ int loop()
                 write(self->dev_ttyS, tmp, sizeof(tmp));
 
                 puts("0x0F!");
+            }
+            else if(self->pack_data.data[3] == 0x01)
+            {
+                uint8_t tmp[] = "\x09\xAC\x03\x07\x02\x02\x02\x00\x00\x00\x00\x01\x00";
+                write(self->dev_ttyS, tmp, sizeof(tmp));
+
+                puts("0x01!");
             }
             else
             {
